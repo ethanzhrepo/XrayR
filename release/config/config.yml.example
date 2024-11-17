@@ -45,6 +45,10 @@ Nodes:
         RedisUsername: # Redis username
         RedisPassword: YOUR PASSWORD # Redis password
         RedisDB: 0 # Redis DB
+        RedisTLSEnabled: true
+        RedisCACert: /opt/conf/ca-cert.pem
+        RedisClientCert: /opt/conf/client-cert.pem
+        RedisClientCertKey: /opt/conf/client-key.pem
         Timeout: 5 # Timeout for redis request
         Expiry: 60 # Expiry time (second)
       EnableFallback: false # Only support for Trojan and Vless

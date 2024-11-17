@@ -7,6 +7,12 @@ type GlobalDeviceLimitConfig struct {
 	RedisUsername string `mapstructure:"RedisUsername"`
 	RedisPassword string `mapstructure:"RedisPassword"`
 	RedisDB       int    `mapstructure:"RedisDB"`
-	Timeout       int    `mapstructure:"Timeout"`
-	Expiry        int    `mapstructure:"Expiry"` // second
+
+	RedisTLSEnabled    bool   `mapstructure:"RedisTLSEnabled"`    // enable tls, must host:port
+	RedisCACert        string `mapstructure:"RedisCACert"`        // ca certification
+	RedisClientCert    string `mapstructure:"RedisClientCert"`    // client certification
+	RedisClientCertKey string `mapstructure:"RedisClientCertKey"` // client certification
+
+	Timeout int `mapstructure:"Timeout"`
+	Expiry  int `mapstructure:"Expiry"` // second
 }

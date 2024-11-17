@@ -3,7 +3,11 @@ package limiter
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,22 +69,60 @@ func (l *Limiter) AddInboundLimiter(tag string, nodeSpeedLimit uint64, userList 
 		gs := goCacheStore.NewGoCache(goCache.New(time.Duration(globalLimit.Expiry)*time.Second, 1*time.Minute))
 
 		// init redis store
-		rs := redisStore.NewRedis(redis.NewClient(
-			&redis.Options{
-				Network:  globalLimit.RedisNetwork,
-				Addr:     globalLimit.RedisAddr,
-				Username: globalLimit.RedisUsername,
-				Password: globalLimit.RedisPassword,
-				DB:       globalLimit.RedisDB,
-			}),
-			store.WithExpiration(time.Duration(globalLimit.Expiry)*time.Second))
+		if globalLimit.RedisTLSEnabled {
+			rs := redisStore.NewRedis(redis.NewClient(
+				&redis.Options{
+					Network:  globalLimit.RedisNetwork,
+					Addr:     globalLimit.RedisAddr,
+					Username: globalLimit.RedisUsername,
+					Password: globalLimit.RedisPassword,
+					DB:       globalLimit.RedisDB,
+				}),
+				store.WithExpiration(time.Duration(globalLimit.Expiry)*time.Second))
 
-		// init chained cache. First use local go-cache, if go-cache is nil, then use redis cache
-		cacheManager := cache.NewChain[any](
-			cache.New[any](gs), // go-cache is priority
-			cache.New[any](rs),
-		)
-		inboundInfo.GlobalLimit.globalOnlineIP = marshaler.New(cacheManager)
+			// init chained cache. First use local go-cache, if go-cache is nil, then use redis cache
+			cacheManager := cache.NewChain[any](
+				cache.New[any](gs), // go-cache is priority
+				cache.New[any](rs),
+			)
+			inboundInfo.GlobalLimit.globalOnlineIP = marshaler.New(cacheManager)
+		} else {
+			caCert, err := os.ReadFile(globalLimit.RedisCACert)
+			if err != nil {
+				log.Fatalf("Failed to read file: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+
+			// load client cert and key
+			cert, err := tls.LoadX509KeyPair(globalLimit.RedisClientCert, globalLimit.RedisClientCertKey)
+			if err != nil {
+				log.Fatalf("Failed to load cert: %v", err)
+			}
+
+			tlsConfig := &tls.Config{
+				RootCAs:            caCertPool,
+				Certificates:       []tls.Certificate{cert},
+				InsecureSkipVerify: false, // accept any certificate presented by the server and any host name in that certificate
+			}
+			rs := redisStore.NewRedis(redis.NewClient(
+				&redis.Options{
+					Network:   globalLimit.RedisNetwork,
+					Addr:      globalLimit.RedisAddr,
+					Username:  globalLimit.RedisUsername,
+					Password:  globalLimit.RedisPassword,
+					DB:        globalLimit.RedisDB,
+					TLSConfig: tlsConfig,
+				}),
+				store.WithExpiration(time.Duration(globalLimit.Expiry)*time.Second))
+
+			// init chained cache. First use local go-cache, if go-cache is nil, then use redis cache
+			cacheManager := cache.NewChain[any](
+				cache.New[any](gs), // go-cache is priority
+				cache.New[any](rs),
+			)
+			inboundInfo.GlobalLimit.globalOnlineIP = marshaler.New(cacheManager)
+		}
 	}
 
 	userMap := new(sync.Map)
